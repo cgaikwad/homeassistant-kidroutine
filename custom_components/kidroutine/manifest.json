@@ -1,0 +1,12 @@
+{
+  "domain": "kidroutine",
+  "name": "KidRoutine",
+  "version": "1.3.2",
+  "documentation": "https://github.com/cgaikwad/homeassistant-kidroutine",
+  "issue_tracker": "https://github.com/cgaikwad/homeassistant-kidroutine/issues",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@cgaikwad"],
+  "iot_class": "local_push",
+  "config_flow": true
+}
