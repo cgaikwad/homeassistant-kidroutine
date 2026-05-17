@@ -61,6 +61,11 @@ class ChoreProgressSensor(SensorEntity):
             "total": total,
             "date": today_data.get("date"),
             "all_done": total > 0 and done == total,
+            "remaining_chores": [
+                c["name"]
+                for c in today_data.get("chores", [])
+                if not c["done"]
+            ],
         }
         self.async_write_ha_state()
 
