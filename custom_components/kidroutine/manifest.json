@@ -1,7 +1,7 @@
 {
   "domain": "kidroutine",
   "name": "KidRoutine",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "documentation": "https://github.com/cgaikwad/homeassistant-kidroutine",
   "issue_tracker": "https://github.com/cgaikwad/homeassistant-kidroutine/issues",
   "requirements": [],
