@@ -289,6 +289,21 @@ class DailyStateStore:
         else:
             if chore_id in done_list:
                 done_list.remove(chore_id)
+            # Clear the choice and rebuild used_keys so the group key is freed.
+            choices: dict = day.setdefault("choices", {})
+            if chore_id in choices:
+                del choices[chore_id]
+            rebuilt: list = []
+            for cid, chosen_label in choices.items():
+                chore_def = chore_store.get(cid)
+                if chore_def is None:
+                    continue
+                for opt in _normalise_options(chore_def.get("options", [])):
+                    if opt["label"] == chosen_label and opt["key"]:
+                        if opt["key"] not in rebuilt:
+                            rebuilt.append(opt["key"])
+                        break
+            day["used_keys"] = rebuilt
 
         await self._save(chore_store.get_config()["history_days"])
         return self._build_today_response(day, chore_store, date_key)
