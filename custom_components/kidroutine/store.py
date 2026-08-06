@@ -482,11 +482,7 @@ class ScreenTimeStore:
         today = date.today()
         today_key = today.isoformat()
         today_min = self.get_today_minutes()
-        week_min = self.get_week_total(today)
-
-        daily_rem = max(0.0, self._config["daily_limit_minutes"] - today_min)
-        weekly_rem = max(0.0, self._config["weekly_limit_minutes"] - week_min)
-        added = min(elapsed, daily_rem, weekly_rem)
+        added = elapsed
 
         day_entry = self._sessions.setdefault(
             today_key, {"used_minutes": 0.0, "sessions": []}

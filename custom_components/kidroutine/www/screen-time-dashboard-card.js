@@ -168,6 +168,10 @@ class ScreenTimeDashboardCard extends HTMLElement {
           line-height: 1;
         }
 
+        #timer.over {
+          color: var(--error-color, #f44336);
+        }
+
         /* ── Action button ── */
         .btn-wrap {
           padding: 0 16px 20px;
@@ -338,19 +342,30 @@ class ScreenTimeDashboardCard extends HTMLElement {
       return h > 0 ? `${h}h ${min}m` : `${min}m`;
     };
 
-    // Timer section (only when active)
-    let timerHtml = "";
+    // Remaining budget: tighter of the daily/weekly caps. Stays constant for
+    // the life of an active session since today_minutes/week_minutes are
+    // only updated on stop.
+    this._remainingMinutes = Math.min(daily_limit - today_minutes, weekly_limit - week_minutes);
+
+    // Timer section (always visible): static "available" figure when idle,
+    // live countdown (which can go negative) while a session is active.
+    let remainingSeconds = this._remainingMinutes * 60;
     if (active) {
       const elapsed = this._sessionStartedAt
-        ? Math.max(0, Math.floor((Date.now() - this._sessionStartedAt) / 1000))
+        ? Math.floor((Date.now() - this._sessionStartedAt) / 1000)
         : 0;
-      timerHtml = `
-        <div class="timer-section">
-          <div class="timer-label">Session time</div>
-          <div id="timer">${this._fmtTimer(elapsed)}</div>
-        </div>
-      `;
+      remainingSeconds -= elapsed;
     }
+    const isOver = remainingSeconds < 0;
+    const timerLabel = active
+      ? (isOver ? "Over today's limit" : "Time remaining")
+      : (isOver ? "Over today's limit" : "Time available today");
+    const timerHtml = `
+      <div class="timer-section">
+        <div class="timer-label">${timerLabel}</div>
+        <div id="timer" class="${isOver ? "over" : ""}">${this._fmtTimer(remainingSeconds)}</div>
+      </div>
+    `;
 
     // Start/Stop button
     let btnHtml;
@@ -425,17 +440,26 @@ class ScreenTimeDashboardCard extends HTMLElement {
   // ── Timer tick (only updates #timer text, no layout thrash) ──────────────
 
   _updateTimer() {
-    if (!this.shadowRoot || !this._sessionStartedAt) return;
+    if (!this.shadowRoot || !this._sessionStartedAt || this._remainingMinutes == null) return;
     const el = this.shadowRoot.getElementById("timer");
+    const label = this.shadowRoot.querySelector(".timer-label");
     if (!el) return;
-    const elapsed = Math.max(0, Math.floor((Date.now() - this._sessionStartedAt) / 1000));
-    el.textContent = this._fmtTimer(elapsed);
+    const elapsed = Math.floor((Date.now() - this._sessionStartedAt) / 1000);
+    const remainingSeconds = this._remainingMinutes * 60 - elapsed;
+    const isOver = remainingSeconds < 0;
+    el.textContent = this._fmtTimer(remainingSeconds);
+    el.classList.toggle("over", isOver);
+    if (label) label.textContent = isOver ? "Over today's limit" : "Time remaining";
   }
 
   _fmtTimer(seconds) {
-    const m = Math.floor(seconds / 60).toString().padStart(2, "0");
-    const s = (seconds % 60).toString().padStart(2, "0");
-    return `${m}:${s}`;
+    const over = seconds < 0;
+    const abs = Math.round(Math.abs(seconds));
+    const h = Math.floor(abs / 3600);
+    const m = Math.floor((abs % 3600) / 60).toString().padStart(2, "0");
+    const s = (abs % 60).toString().padStart(2, "0");
+    const body = h > 0 ? `${h}:${m}:${s}` : `${m}:${s}`;
+    return over ? `-${body}` : body;
   }
 
   // ── Utilities ─────────────────────────────────────────────────────────────

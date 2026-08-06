@@ -96,7 +96,7 @@ class ScreenTimeTodaySensor(SensorEntity):
         daily_limit = state.get("daily_limit", 120)
         self._extra = {
             "limit_minutes": daily_limit,
-            "remaining_minutes": round(max(0.0, daily_limit - self._usage), 1),
+            "remaining_minutes": round(daily_limit - self._usage, 1),
             "active": state.get("active_session") is not None,
             "active_since": (state.get("active_session") or {}).get("start_time"),
         }
@@ -130,7 +130,7 @@ class ScreenTimeWeekSensor(SensorEntity):
         weekly_limit = state.get("weekly_limit", 480)
         self._extra = {
             "limit_minutes": weekly_limit,
-            "remaining_minutes": round(max(0.0, weekly_limit - self._usage), 1),
+            "remaining_minutes": round(weekly_limit - self._usage, 1),
         }
         if self.hass is not None:
             self.async_write_ha_state()
