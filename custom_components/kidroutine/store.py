@@ -177,6 +177,28 @@ class DailyStateStore:
             {"done": [], "choices": {}, "done_names": {}},
         )
 
+    def _compute_used_keys_this_week(
+        self, date_key: str, chore_store: ChoreDefinitionStore
+    ) -> set[str]:
+        today = date.fromisoformat(date_key)
+        monday = today - timedelta(days=today.weekday())
+        used: set[str] = set()
+        for offset in range(7):
+            dk = (monday + timedelta(days=offset)).isoformat()
+            if dk in self._days:
+                day_data = self._days[dk]
+                used.update(day_data.get("used_keys", []))
+                if not day_data.get("used_keys"):
+                    for cid, chosen_label in day_data.get("choices", {}).items():
+                        chore_def = chore_store.get(cid)
+                        if chore_def is None:
+                            continue
+                        for opt in _normalise_options(chore_def.get("options", [])):
+                            if opt["label"] == chosen_label and opt["key"]:
+                                used.add(opt["key"])
+                                break
+        return used
+
     def _build_today_response(
         self,
         day: dict,
@@ -187,25 +209,11 @@ class DailyStateStore:
         today = date.fromisoformat(date_key)
         monday = today - timedelta(days=today.weekday())
         done_this_week: set[str] = set()
-        used_keys_this_week: set[str] = set()
         for offset in range(7):
             dk = (monday + timedelta(days=offset)).isoformat()
             if dk in self._days:
-                day_data = self._days[dk]
-                done_this_week.update(day_data.get("done", []))
-                # Keys are stored directly at pick time (fast path).
-                used_keys_this_week.update(day_data.get("used_keys", []))
-                # Fallback: resolve keys via label matching for picks made before
-                # used_keys was introduced (no used_keys field in that day's data).
-                if not day_data.get("used_keys"):
-                    for cid, chosen_label in day_data.get("choices", {}).items():
-                        chore_def = chore_store.get(cid)
-                        if chore_def is None:
-                            continue
-                        for opt in _normalise_options(chore_def.get("options", [])):
-                            if opt["label"] == chosen_label and opt["key"]:
-                                used_keys_this_week.add(opt["key"])
-                                break
+                done_this_week.update(self._days[dk].get("done", []))
+        used_keys_this_week = self._compute_used_keys_this_week(date_key, chore_store)
 
         scheduled = chore_store.get_scheduled_for_date(today, done_this_week)
         done_set: set[str] = set(day.get("done", []))
@@ -293,17 +301,7 @@ class DailyStateStore:
             choices: dict = day.setdefault("choices", {})
             if chore_id in choices:
                 del choices[chore_id]
-            rebuilt: list = []
-            for cid, chosen_label in choices.items():
-                chore_def = chore_store.get(cid)
-                if chore_def is None:
-                    continue
-                for opt in _normalise_options(chore_def.get("options", [])):
-                    if opt["label"] == chosen_label and opt["key"]:
-                        if opt["key"] not in rebuilt:
-                            rebuilt.append(opt["key"])
-                        break
-            day["used_keys"] = rebuilt
+            day["used_keys"] = list(self._compute_used_keys_this_week(date_key, chore_store))
 
         await self._save(chore_store.get_config()["history_days"])
         return self._build_today_response(day, chore_store, date_key)

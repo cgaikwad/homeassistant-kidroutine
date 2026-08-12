@@ -368,12 +368,13 @@ class ChoreDashboardCard extends HTMLElement {
     const root = this.shadowRoot.getElementById("root");
     const allDone = total > 0 && done === total;
     const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    const kidName = this._data.kid_name || "";
 
     // Build header / celebration
     const headerHtml = allDone
       ? `<div class="celebration">
            <div class="celebration-text">All done!</div>
-           <div class="celebration-sub">Great work today, Brayden!</div>
+           <div class="celebration-sub">Great work today, ${this._esc(kidName)}!</div>
          </div>`
       : `<div class="card-header">
            <span class="title">Today's Chores</span>
