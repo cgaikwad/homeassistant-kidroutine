@@ -71,6 +71,7 @@ def _notify_screen_time_entities(hass: HomeAssistant, state: dict) -> None:
 async def ws_get_today(hass: HomeAssistant, connection, msg: dict) -> None:
     chore_store, daily_store = _stores(hass)
     result = await daily_store.async_get_today(chore_store)
+    result["kid_name"] = hass.data[DOMAIN]["kid_name"]
     _notify_entities(hass, result)
     connection.send_result(msg["id"], result)
 
