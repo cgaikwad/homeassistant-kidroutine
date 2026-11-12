@@ -32,6 +32,8 @@ _OPTION_SCHEMA = vol.Any(
     vol.Schema({
         vol.Required("label"): str,
         vol.Optional("key", default=""): str,
+        vol.Optional("week_interval", default=1): vol.All(int, vol.Range(min=1, max=8)),
+        vol.Optional("week_anchor", default=""): str,
     }),
 )
 
