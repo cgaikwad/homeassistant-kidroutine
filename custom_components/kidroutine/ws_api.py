@@ -146,6 +146,8 @@ async def ws_pick_choice(hass: HomeAssistant, connection, msg: dict) -> None:
         vol.Optional("goal_count", default=1): vol.All(int, vol.Range(min=1)),
         vol.Optional("period_start", default=""): str,
         vol.Optional("period_end", default=""): str,
+        vol.Optional("week_interval", default=1): vol.All(int, vol.Range(min=1, max=8)),
+        vol.Optional("week_anchor", default=""): str,
     }
 )
 @websocket_api.async_response
@@ -160,6 +162,8 @@ async def ws_add_chore(hass: HomeAssistant, connection, msg: dict) -> None:
         goal_count=msg.get("goal_count", 1),
         period_start=msg.get("period_start", ""),
         period_end=msg.get("period_end", ""),
+        week_interval=msg.get("week_interval", 1),
+        week_anchor=msg.get("week_anchor", ""),
     )
     connection.send_result(msg["id"], {"chore": chore})
 
@@ -176,13 +180,15 @@ async def ws_add_chore(hass: HomeAssistant, connection, msg: dict) -> None:
         vol.Optional("goal_count"): vol.All(int, vol.Range(min=1)),
         vol.Optional("period_start"): str,
         vol.Optional("period_end"): str,
+        vol.Optional("week_interval"): vol.All(int, vol.Range(min=1, max=8)),
+        vol.Optional("week_anchor"): str,
     }
 )
 @websocket_api.async_response
 async def ws_update_chore(hass: HomeAssistant, connection, msg: dict) -> None:
     chore_store, _ = _stores(hass)
     kwargs: dict = {}
-    for field in ("name", "schedule", "options", "enabled", "goal_count", "period_start", "period_end"):
+    for field in ("name", "schedule", "options", "enabled", "goal_count", "period_start", "period_end", "week_interval", "week_anchor"):
         if field in msg:
             kwargs[field] = msg[field]
     if "chore_type" in msg:
