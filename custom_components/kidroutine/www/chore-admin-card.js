@@ -265,12 +265,28 @@ class ChoreAdminCard extends HTMLElement {
 
         .options-list { margin-top: 8px; }
 
+        .option-item {
+          margin-bottom: 10px;
+          padding-bottom: 8px;
+          border-bottom: 1px dashed var(--divider-color);
+        }
+
         .option-row {
           display: flex;
           gap: 8px;
-          margin-bottom: 6px;
           align-items: center;
         }
+
+        .option-repeat {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          align-items: center;
+          margin-top: 6px;
+        }
+        .option-repeat select { flex: 0 0 auto; width: auto; padding: 4px 8px; font-size: 0.8rem; }
+        .option-repeat input[type="date"] { flex: 0 0 auto; width: auto; padding: 4px 8px; font-size: 0.8rem; }
+        .option-repeat .repeat-hint { flex: 1 1 100%; }
 
         .option-row input { flex: 1; }
         .option-row .opt-key { flex: 0 0 110px; font-size: 0.8rem; color: var(--secondary-text-color); }
@@ -522,6 +538,11 @@ class ChoreAdminCard extends HTMLElement {
     return ` · Every ${interval} weeks (${onNow ? "on this week" : `next: week of ${this._fmtShort(next)}`})`;
   }
 
+  _choiceLabel(options) {
+    const rotating = options.filter((o) => typeof o === "object" && (o.week_interval || 1) > 1).length;
+    return `Pick-a-chore (${options.length} options${rotating ? `, ${rotating} rotating` : ""})`;
+  }
+
   // ── Chore list render ─────────────────────────────────────────────────────
 
   _renderList() {
@@ -549,7 +570,7 @@ class ChoreAdminCard extends HTMLElement {
           : sched.days.map((d) => d.charAt(0).toUpperCase() + d.slice(1)).join(", ");
         schedLabel += this._repeatLabel(chore);
         typeLabel = chore.type === "choice"
-          ? `Pick-a-chore (${(chore.options || []).length} options)`
+          ? this._choiceLabel(chore.options || [])
           : "Regular";
       }
 
@@ -732,13 +753,39 @@ class ChoreAdminCard extends HTMLElement {
   _addOptionRow(container, value) {
     const label = (value && typeof value === "object") ? (value.label || "") : (value || "");
     const key   = (value && typeof value === "object") ? (value.key  || "") : "";
+    const isObj = value && typeof value === "object";
+    const interval = isObj && value.week_interval ? value.week_interval : 1;
+    const anchor = isObj && value.week_anchor
+      ? value.week_anchor
+      : this._isoLocal(this._mondayOf(this._isoLocal(new Date())));
+    const repeatOpts = [1, 2, 3, 4]
+      .map((n) => `<option value="${n}"${n === interval ? " selected" : ""}>${n === 1 ? "Every week" : `Every ${n} weeks`}</option>`)
+      .join("");
     const row = document.createElement("div");
-    row.className = "option-row";
+    row.className = "option-item";
     row.innerHTML = `
-      <input type="text" class="opt-input" value="${this._esc(label)}" placeholder="e.g. Vacuum">
-      <input type="text" class="opt-key"   value="${this._esc(key)}"   placeholder="Group key">
-      <button class="btn-icon" title="Remove">✕</button>
+      <div class="option-row">
+        <input type="text" class="opt-input" value="${this._esc(label)}" placeholder="e.g. Vacuum">
+        <input type="text" class="opt-key"   value="${this._esc(key)}"   placeholder="Group key">
+        <button class="btn-icon" title="Remove">✕</button>
+      </div>
+      <div class="option-repeat">
+        <select class="opt-interval" title="Repeat">${repeatOpts}</select>
+        <input type="date" class="opt-anchor" value="${anchor}" title="Starting week of">
+        <span class="repeat-hint opt-hint"></span>
+      </div>
     `;
+    const update = () => {
+      const n = parseInt(row.querySelector(".opt-interval").value, 10) || 1;
+      const a = row.querySelector(".opt-anchor").value;
+      row.querySelector(".opt-anchor").style.display = n > 1 ? "" : "none";
+      row.querySelector(".opt-hint").textContent = n > 1 && a
+        ? "On weeks of: " + this._activeWeeks(a, n, 3).map((d) => this._fmtShort(d)).join(", ")
+        : "";
+    };
+    row.querySelector(".opt-interval").addEventListener("change", update);
+    row.querySelector(".opt-anchor").addEventListener("change", update);
+    update();
     row.querySelector(".btn-icon").addEventListener("click", () => row.remove());
     container.appendChild(row);
     if (!label) row.querySelector(".opt-input").focus();
@@ -766,12 +813,23 @@ class ChoreAdminCard extends HTMLElement {
       params = { name, schedule: "", chore_type, options: [], goal_count, period_start, period_end, week_interval: 1, week_anchor: "" };
     } else {
       const schedule = this._buildScheduleFromForm(formRoot);
-      const options  = [...formRoot.querySelectorAll(".option-row")]
-        .map((row) => ({
-          label: row.querySelector(".opt-input").value.trim(),
-          key:   row.querySelector(".opt-key").value.trim(),
-        }))
+      const options  = [...formRoot.querySelectorAll(".option-item")]
+        .map((row) => {
+          const week_interval = parseInt(row.querySelector(".opt-interval").value, 10) || 1;
+          const anchorVal = row.querySelector(".opt-anchor").value;
+          return {
+            label: row.querySelector(".opt-input").value.trim(),
+            key:   row.querySelector(".opt-key").value.trim(),
+            week_interval,
+            week_anchor: week_interval > 1 && anchorVal ? this._isoLocal(this._mondayOf(anchorVal)) : "",
+          };
+        })
         .filter((o) => o.label);
+      const missingAnchor = options.find((o) => o.week_interval > 1 && !o.week_anchor);
+      if (missingAnchor) {
+        this._showFormError(formRoot, `Please pick a starting week for "${missingAnchor.label}".`);
+        return;
+      }
       if (chore_type === "choice" && options.length < 2) {
         this._showFormError(formRoot, "Pick-a-chore needs at least 2 options.");
         return;

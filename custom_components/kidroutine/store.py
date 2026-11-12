@@ -22,9 +22,14 @@ def _normalise_options(raw: list) -> list[dict]:
     result = []
     for item in raw:
         if isinstance(item, str):
-            result.append({"label": item, "key": ""})
+            result.append({"label": item, "key": "", "week_interval": 1, "week_anchor": ""})
         else:
-            result.append({"label": str(item.get("label", "")), "key": str(item.get("key", ""))})
+            result.append({
+                "label": str(item.get("label", "")),
+                "key": str(item.get("key", "")),
+                "week_interval": int(item.get("week_interval", 1) or 1),
+                "week_anchor": str(item.get("week_anchor", "")),
+            })
     return result
 
 
@@ -248,6 +253,7 @@ class DailyStateStore:
             visible_labels = [
                 o["label"] for o in raw_opts
                 if not (o["key"] and o["key"] in used_keys_this_week)
+                and _is_on_week(o, today)
             ]
             chores_out.append(
                 {
