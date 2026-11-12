@@ -28,6 +28,22 @@ def _normalise_options(raw: list) -> list[dict]:
     return result
 
 
+def _is_on_week(chore: dict, target: date) -> bool:
+    """Return True if target falls in an active week for an every-N-weeks chore."""
+    interval = int(chore.get("week_interval", 1) or 1)
+    anchor_str = chore.get("week_anchor", "")
+    if interval <= 1 or not anchor_str:
+        return True
+    try:
+        anchor = date.fromisoformat(anchor_str)
+    except ValueError:
+        return True
+    anchor_monday = anchor - timedelta(days=anchor.weekday())
+    target_monday = target - timedelta(days=target.weekday())
+    weeks = (target_monday - anchor_monday).days // 7
+    return weeks % interval == 0
+
+
 class ChoreDefinitionStore:
     """Persists chore definitions and integration config."""
 
@@ -72,6 +88,8 @@ class ChoreDefinitionStore:
         goal_count: int = 1,
         period_start: str = "",
         period_end: str = "",
+        week_interval: int = 1,
+        week_anchor: str = "",
     ) -> dict:
         chore = {
             "id": str(uuid.uuid4()),
@@ -80,6 +98,8 @@ class ChoreDefinitionStore:
             "type": chore_type,
             "options": _normalise_options(options),
             "enabled": enabled,
+            "week_interval": week_interval,
+            "week_anchor": week_anchor,
         }
         if chore_type == "goal":
             chore["goal_count"] = goal_count
@@ -93,7 +113,7 @@ class ChoreDefinitionStore:
         chore = self._chores.get(chore_id)
         if chore is None:
             return None
-        allowed = {"name", "schedule", "type", "options", "enabled", "goal_count", "period_start", "period_end"}
+        allowed = {"name", "schedule", "type", "options", "enabled", "goal_count", "period_start", "period_end", "week_interval", "week_anchor"}
         for k, v in kwargs.items():
             if k in allowed:
                 if k == "options":
@@ -122,6 +142,8 @@ class ChoreDefinitionStore:
             if not chore.get("enabled", True):
                 continue
             if chore.get("type") == "goal":
+                continue
+            if not _is_on_week(chore, target):
                 continue
             schedule: str = chore.get("schedule", "daily")
             if schedule == "daily":

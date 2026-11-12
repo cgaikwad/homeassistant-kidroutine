@@ -205,6 +205,24 @@ class ChoreAdminCard extends HTMLElement {
           box-sizing: border-box;
         }
 
+        select {
+          width: 100%;
+          padding: 8px 10px;
+          border: 1px solid var(--divider-color);
+          border-radius: 6px;
+          background: var(--card-background-color);
+          color: var(--primary-text-color);
+          font-size: 0.95rem;
+          box-sizing: border-box;
+        }
+
+        .repeat-row { margin-top: 10px; }
+        .repeat-row .field { margin-bottom: 8px; }
+        .repeat-hint {
+          font-size: 0.8rem;
+          color: var(--secondary-text-color);
+        }
+
         .goal-fields { margin-top: 4px; }
         .goal-fields .field { margin-bottom: 10px; }
         .goal-date-row { display: flex; gap: 10px; }
@@ -460,6 +478,50 @@ class ChoreAdminCard extends HTMLElement {
     return days.length ? `weekly:${days.join(",")}` : "daily";
   }
 
+  // ── Every-N-weeks helpers (local dates, not UTC) ──────────────────────────
+
+  _mondayOf(dateStr) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const dt = dateStr ? new Date(y, m - 1, d) : new Date();
+    dt.setHours(0, 0, 0, 0);
+    dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7));
+    return dt;
+  }
+
+  _isoLocal(dt) {
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+  }
+
+  _fmtShort(dt) {
+    return dt.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+
+  /** Next `count` active weeks (Mondays) on or after the current week. */
+  _activeWeeks(anchorStr, interval, count) {
+    const anchor = this._mondayOf(anchorStr);
+    const thisMonday = this._mondayOf(this._isoLocal(new Date()));
+    const weeks = Math.round((thisMonday - anchor) / (7 * 86400000));
+    const offset = ((weeks % interval) + interval) % interval;
+    const first = new Date(thisMonday);
+    first.setDate(first.getDate() + (offset === 0 ? 0 : interval - offset) * 7);
+    const result = [];
+    for (let i = 0; i < count; i++) {
+      const d = new Date(first);
+      d.setDate(d.getDate() + i * interval * 7);
+      result.push(d);
+    }
+    return result;
+  }
+
+  _repeatLabel(chore) {
+    const interval = chore.week_interval || 1;
+    if (interval <= 1 || !chore.week_anchor) return "";
+    const [next] = this._activeWeeks(chore.week_anchor, interval, 1);
+    const onNow = this._isoLocal(next) === this._isoLocal(this._mondayOf(this._isoLocal(new Date())));
+    return ` · Every ${interval} weeks (${onNow ? "on this week" : `next: week of ${this._fmtShort(next)}`})`;
+  }
+
   // ── Chore list render ─────────────────────────────────────────────────────
 
   _renderList() {
@@ -485,6 +547,7 @@ class ChoreAdminCard extends HTMLElement {
         schedLabel = sched.mode === "daily" ? "Daily"
           : sched.mode === "weekly_once" ? "Once per week"
           : sched.days.map((d) => d.charAt(0).toUpperCase() + d.slice(1)).join(", ");
+        schedLabel += this._repeatLabel(chore);
         typeLabel = chore.type === "choice"
           ? `Pick-a-chore (${(chore.options || []).length} options)`
           : "Regular";
@@ -536,6 +599,13 @@ class ChoreAdminCard extends HTMLElement {
     const goalCount = isEdit && chore.goal_count ? chore.goal_count : 5;
     const periodStart = isEdit && chore.period_start ? chore.period_start : "";
     const periodEnd   = isEdit && chore.period_end   ? chore.period_end   : "";
+    const weekInterval = isEdit && chore.week_interval ? chore.week_interval : 1;
+    const weekAnchor   = isEdit && chore.week_anchor
+      ? chore.week_anchor
+      : this._isoLocal(this._mondayOf(this._isoLocal(new Date())));
+    const repeatOpts = [1, 2, 3, 4]
+      .map((n) => `<option value="${n}"${n === weekInterval ? " selected" : ""}>${n === 1 ? "Every week" : `Every ${n} weeks`}</option>`)
+      .join("");
 
     formArea.innerHTML = `
       <div class="form-panel">
@@ -555,6 +625,19 @@ class ChoreAdminCard extends HTMLElement {
           </div>
           <div class="day-picker check-group" id="day-picker" style="${sched.mode === "weekly" ? "" : "display:none"}">
             ${dayCheckboxes}
+          </div>
+          <div class="repeat-row">
+            <div class="field">
+              <label>Repeat</label>
+              <select id="f-week-interval">${repeatOpts}</select>
+            </div>
+            <div id="anchor-fields" style="${weekInterval > 1 ? "" : "display:none"}">
+              <div class="field">
+                <label>Starting week of</label>
+                <input type="date" id="f-week-anchor" value="${weekAnchor}">
+              </div>
+              <div class="repeat-hint" id="repeat-hint"></div>
+            </div>
           </div>
         </div>
 
@@ -618,6 +701,18 @@ class ChoreAdminCard extends HTMLElement {
       })
     );
 
+    const updateRepeat = () => {
+      const interval = parseInt(formArea.querySelector("#f-week-interval").value, 10) || 1;
+      const anchor = formArea.querySelector("#f-week-anchor").value;
+      formArea.querySelector("#anchor-fields").style.display = interval > 1 ? "" : "none";
+      formArea.querySelector("#repeat-hint").textContent = interval > 1 && anchor
+        ? "On weeks of: " + this._activeWeeks(anchor, interval, 3).map((d) => this._fmtShort(d)).join(", ")
+        : "";
+    };
+    formArea.querySelector("#f-week-interval").addEventListener("change", updateRepeat);
+    formArea.querySelector("#f-week-anchor").addEventListener("change", updateRepeat);
+    updateRepeat();
+
     formArea.querySelector("#btn-add-option").addEventListener("click", () =>
       this._addOptionRow(optsList, "")
     );
@@ -668,7 +763,7 @@ class ChoreAdminCard extends HTMLElement {
         this._showFormError(formRoot, "Period end must be after period start.");
         return;
       }
-      params = { name, schedule: "", chore_type, options: [], goal_count, period_start, period_end };
+      params = { name, schedule: "", chore_type, options: [], goal_count, period_start, period_end, week_interval: 1, week_anchor: "" };
     } else {
       const schedule = this._buildScheduleFromForm(formRoot);
       const options  = [...formRoot.querySelectorAll(".option-row")]
@@ -681,7 +776,14 @@ class ChoreAdminCard extends HTMLElement {
         this._showFormError(formRoot, "Pick-a-chore needs at least 2 options.");
         return;
       }
-      params = { name, schedule, chore_type, options };
+      const week_interval = parseInt(formRoot.querySelector("#f-week-interval").value, 10) || 1;
+      const anchorVal = formRoot.querySelector("#f-week-anchor").value;
+      if (week_interval > 1 && !anchorVal) {
+        this._showFormError(formRoot, "Please pick a starting week.");
+        return;
+      }
+      const week_anchor = week_interval > 1 ? this._isoLocal(this._mondayOf(anchorVal)) : "";
+      params = { name, schedule, chore_type, options, week_interval, week_anchor };
     }
 
     try {
